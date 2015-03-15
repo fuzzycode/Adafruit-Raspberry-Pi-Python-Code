@@ -173,6 +173,13 @@ class Adafruit_L3GD20_Unified(Adafruit_I2C):
         # Nothing to do ... keep default values
         # ------------------------------------------------------------------
 
+    @property
+    def autoRange(self):
+        return self._auto_range
+
+    @autoRange.setter
+    def autoRange(self, value):
+        self._auto_range = value
 
     def _uint16(self, list, idx):
         n = list[idx] | (list[idx+1] << 8)   # Low, high bytes
@@ -182,7 +189,7 @@ class Adafruit_L3GD20_Unified(Adafruit_I2C):
         """
         Checks if any of the entries in the list has saturated the sensor readings
         :param list:
-        :return:
+        :return: Boolean
         """
 
         for x in list:
