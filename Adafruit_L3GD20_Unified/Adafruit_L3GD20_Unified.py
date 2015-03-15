@@ -193,7 +193,7 @@ class Adafruit_L3GD20_Unified(Adafruit_I2C):
         """
 
         for x in list:
-            if x < -32760 or x > 32760:
+            if x <= -32760 or x >= 32760:
                 return True
         return False
 
