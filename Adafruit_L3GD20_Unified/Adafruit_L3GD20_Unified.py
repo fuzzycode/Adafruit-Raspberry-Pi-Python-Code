@@ -1,10 +1,7 @@
 #!/usr/bin/python
 
 # Python library for Adafruit (L3GD20U).
-# This is pretty much a direct port of the current Arduino library and is
-# similarly incomplete (e.g. no orientation value returned from read()
-# method).  This does add optional high resolution mode to accelerometer
-# though.
+# This is pretty much a direct port of the current Arduino library
 
 # Copyright 2013 Adafruit Industries
 
