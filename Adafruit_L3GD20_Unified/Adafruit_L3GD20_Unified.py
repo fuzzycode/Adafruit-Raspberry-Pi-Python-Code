@@ -79,5 +79,153 @@ class Adafruit_L3GD20_Unified(Adafruit_I2C):
     GYRO_RANGE_500DPS  = 500
     GYRO_RANGE_2000DPS = 2000
 
+    def __init__(self, autorange = False, range = GYRO_RANGE_250DPS, busnum=-1, debug=False):
+        self._auto_range, self._range = autorange, range
+
+
+        # Create _gyro
+        self._gyro = Adafruit_I2C.Adafruit_I2C(self.L3GD20_ADDRESS, busnum, debug)
+        assert self._gyro.readU8(self.GYRO_REGISTER_WHO_AM_I) in (self.L3GD20_ID, self.L3GD20H_ID)
+
+
+        # Set CTRL_REG1 (0x20)
+        # ====================================================================
+        # BIT  Symbol    Description                                   Default
+        # ---  ------    --------------------------------------------- -------
+        # 7-6  DR1/0     Output data rate                                   00
+        # 5-4  BW1/0     Bandwidth selection                                00
+        #  3  PD        0 = Power-down mode, 1 = normal/sleep mode          0
+        #  2  ZEN       Z-axis enable (0 = disabled, 1 = enabled)           1
+        #  1  YEN       Y-axis enable (0 = disabled, 1 = enabled)           1
+        #  0  XEN       X-axis enable (0 = disabled, 1 = enabled)           1
+
+        # Reset then switch to normal mode and enable all three channels
+        self._gyro.write8(self.GYRO_REGISTER_CTRL_REG1, 0x00);
+        self._gyro.write8(self.GYRO_REGISTER_CTRL_REG1, 0x0F);
+
+        # Set CTRL_REG2 (0x21)
+        # ====================================================================
+        # BIT  Symbol    Description                                   Default
+        # ---  ------    --------------------------------------------- -------
+        # 5-4  HPM1/0    High-pass filter mode selection                    00
+        # 3-0  HPCF3..0  High-pass filter cutoff frequency selection      0000
+
+        # Nothing to do ... keep default values
+        # --------------------------------------------------------------------
+
+        # Set CTRL_REG3 (0x22)
+        # ====================================================================
+        # BIT  Symbol    Description                                   Default
+        # ---  ------    --------------------------------------------- -------
+        #   7  I1_Int1   Interrupt enable on INT1 (0=disable,1=enable)       0
+        #   6  I1_Boot   Boot status on INT1 (0=disable,1=enable)            0
+        #   5  H-Lactive Interrupt active config on INT1 (0=high,1=low)      0
+        #   4  PP_OD     Push-Pull/Open-Drain (0=PP, 1=OD)                   0
+        #   3  I2_DRDY   Data ready on DRDY/INT2 (0=disable,1=enable)        0
+        #   2  I2_WTM    FIFO wtrmrk int on DRDY/INT2 (0=dsbl,1=enbl)        0
+        #   1  I2_ORun   FIFO overrun int on DRDY/INT2 (0=dsbl,1=enbl)       0
+        #   0  I2_Empty  FIFI empty int on DRDY/INT2 (0=dsbl,1=enbl)         0
+
+        # Nothing to do ... keep default values
+        # ------------------------------------------------------------------
+
+        # Set CTRL_REG4 (0x23)
+        # ====================================================================
+        # BIT  Symbol    Description                                   Default
+        # ---  ------    --------------------------------------------- -------
+        #   7  BDU       Block Data Update (0=continuous, 1=LSB/MSB)         0
+        #   6  BLE       Big/Little-Endian (0=Data LSB, 1=Data MSB)          0
+        # 5-4  FS1/0     Full scale selection                               00
+        #                                00 = 250 dps
+        #                                01 = 500 dps
+        #                                10 = 2000 dps
+        #                                11 = 2000 dps
+        #   0  SIM       SPI Mode (0=4-wire, 1=3-wire)                       0
+
+        # Adjust resolution if requested
+        if self._range == self.GYRO_RANGE_250DPS:
+            self._gyro.write8(self.GYRO_REGISTER_CTRL_REG4, 0x00)
+        elif self._range == self.GYRO_RANGE_500DPS:
+            self._gyro.write8(self.GYRO_REGISTER_CTRL_REG4, 0x10)
+        elif self._range == self.GYRO_RANGE_2000DPS:
+            self._gyro.write8(self.GYRO_REGISTER_CTRL_REG4, 0x20)
+        # ------------------------------------------------------------------
+
+        # Set CTRL_REG5 (0x24)
+        # ====================================================================
+        # BIT  Symbol    Description                                   Default
+        # ---  ------    --------------------------------------------- -------
+        #   7  BOOT      Reboot memory content (0=normal, 1=reboot)          0
+        #   6  FIFO_EN   FIFO enable (0=FIFO disable, 1=enable)              0
+        #   4  HPen      High-pass filter enable (0=disable,1=enable)        0
+        # 3-2  INT1_SEL  INT1 Selection config                              00
+        # 1-0  OUT_SEL   Out selection config                               00
+
+        # Nothing to do ... keep default values
+        # ------------------------------------------------------------------
+
+
+    def _uint16(self, list, idx):
+        n = list[idx] | (list[idx+1] << 8)   # Low, high bytes
+        return n if n < 32768 else n - 65536 # 2's complement signed
+
+    def _saturated(self, list):
+        """
+        Checks if any of the entries in the list has saturated the sensor readings
+        :param list:
+        :return:
+        """
+
+        for x in list:
+            if x < -32760 or x > 32760:
+                return True
+        return False
+
+    def _updateRange(self):
+        """
+        Try to increase the sensor range
+
+        :return: Boolean. True if the range can be adjusted, False if not
+        """
+        if self._range == self.GYRO_RANGE_250DPS:
+            self._range = self.GYRO_RANGE_500DPS
+
+            self._gyro.write8(self.GYRO_REGISTER_CTRL_REG1, 0x00);
+            self._gyro.write8(self.GYRO_REGISTER_CTRL_REG1, 0x0F);
+            self._gyro.write8(self.GYRO_REGISTER_CTRL_REG4, 0x10);
+            self._gyro.write8(self.GYRO_REGISTER_CTRL_REG5, 0x80);
+            return True
+        elif self._range == self.GYRO_RANGE_500DPS:
+            self._range = self.GYRO_RANGE_2000DPS
+
+            self._gyro.write8(self.GYRO_REGISTER_CTRL_REG1, 0x00);
+            self._gyro.write8(self.GYRO_REGISTER_CTRL_REG1, 0x0F);
+            self._gyro.write8(self.GYRO_REGISTER_CTRL_REG4, 0x20);
+            self._gyro.write8(self.GYRO_REGISTER_CTRL_REG5, 0x80);
+            return True
+        else:
+            return False
+
+    def read(self):
+        """
+        :return:
+        """
+        list = self._gyro.readList(self.GYRO_REGISTER_OUT_X_L | 0x80, 6)
+        reading = (
+            self._uint16(list, 0),
+            self._uint16(list, 2),
+            self._uint16(list, 4))
+
+        if not self._auto_range:
+            return reading
+        elif self._saturated(reading):
+            if self._updateRange():  # If it is possible to increase the range, invalidate the reading
+                return None
+            else:
+                return reading
+        else:
+            return reading
+
+
 if __name__ == '__main__':
     pass
