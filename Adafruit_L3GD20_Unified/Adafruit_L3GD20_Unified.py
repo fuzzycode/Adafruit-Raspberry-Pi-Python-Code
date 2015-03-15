@@ -28,6 +28,9 @@ from Adafruit_I2C import Adafruit_I2C
 
 class Adafruit_L3GD20_Unified(Adafruit_I2C):
 
+    # Taken from Adafruit_Sensor.h
+    SENSORS_DPS_TO_RADS      = 0.017453293  # Degrees/s to rad/s multiplier
+
     #=========================================================================
     # I2C ADDRESS/BITS AND SETTINGS
     #-------------------------------------------------------------------------
@@ -79,12 +82,18 @@ class Adafruit_L3GD20_Unified(Adafruit_I2C):
     GYRO_RANGE_500DPS  = 500
     GYRO_RANGE_2000DPS = 2000
 
+
+    GYRO_COMPENSATIONS = {
+            GYRO_RANGE_250DPS:GYRO_SENSITIVITY_250DPS,
+            GYRO_RANGE_500DPS:GYRO_SENSITIVITY_500DPS,
+            GYRO_RANGE_2000DPS:GYRO_SENSITIVITY_2000DPS}
+
     def __init__(self, autorange = False, range = GYRO_RANGE_250DPS, busnum=-1, debug=False):
         self._auto_range, self._range = autorange, range
 
 
         # Create _gyro
-        self._gyro = Adafruit_I2C.Adafruit_I2C(self.L3GD20_ADDRESS, busnum, debug)
+        self._gyro = Adafruit_I2C(self.L3GD20_ADDRESS, busnum, debug)
         assert self._gyro.readU8(self.GYRO_REGISTER_WHO_AM_I) in (self.L3GD20_ID, self.L3GD20H_ID)
 
 
@@ -216,16 +225,19 @@ class Adafruit_L3GD20_Unified(Adafruit_I2C):
             self._uint16(list, 2),
             self._uint16(list, 4))
 
-        if not self._auto_range:
-            return reading
-        elif self._saturated(reading):
-            if self._updateRange():  # If it is possible to increase the range, invalidate the reading
-                return None
-            else:
-                return reading
-        else:
-            return reading
+
+        # Check if ranges should and can be adjusted
+        if self._auto_range and self._saturated(reading) and self._updateRange():
+            return None
+
+        return tuple(x * self.GYRO_COMPENSATIONS[self._range] * self.SENSORS_DPS_TO_RADS for x in reading)
 
 
 if __name__ == '__main__':
-    pass
+    from time import sleep
+
+    l3g = Adafruit_L3GD20_Unified(True)
+
+    while True:
+        print(l3g.read())
+        sleep(1)
